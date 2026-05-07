@@ -38,7 +38,7 @@ import {
   Flame,
   CheckSquare
 } from 'lucide-react';
-import { auth, db, googleProvider, signInWithPopup } from './lib/firebase';
+import { auth, db, googleProvider, signInWithRedirect, getRedirectResult } from './lib/firebase';
 
 // --- CONSTANTS & TYPES ---
 
@@ -148,6 +148,12 @@ export default function App() {
     return unsubscribe;
   }, []);
 
+  useEffect(() => {
+    getRedirectResult(auth).catch((e) => {
+      console.error("Redirect login error", e);
+    });
+  }, []);
+
   const showToast = (message: string, type: 'success' | 'error' = 'success') => {
     setToast({ message, type });
     setTimeout(() => setToast(null), 2200);
@@ -155,8 +161,9 @@ export default function App() {
 
   const handleLogin = async () => {
     try {
-      await signInWithPopup(auth, googleProvider);
+      await signInWithRedirect(auth, googleProvider);
     } catch (e) {
+      console.error("Login error", e);
       showToast("Login failed", "error");
     }
   };
