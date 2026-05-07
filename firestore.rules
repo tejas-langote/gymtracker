@@ -1,0 +1,64 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Default deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // Validation helpers
+    function isValidSettings(data) {
+      return data.keys().hasAll(['currentWeek']) 
+             && data.keys().size() == 1
+             && data.currentWeek is number
+             && data.currentWeek >= 1 && data.currentWeek <= 4;
+    }
+
+    function isValidWorkout(data) {
+      return data.keys().hasAll(['timestamp', 'week', 'day', 'workoutName', 'exercises'])
+             && data.keys().size() == 5
+             && data.week is number
+             && data.day is string
+             && data.workoutName is string
+             && data.exercises is list
+             && data.exercises.size() > 0
+             && data.exercises.size() <= 20;
+    }
+
+    // Match patterns
+    match /users/{userId} {
+      match /profile/settings {
+        allow get: if isOwner(userId);
+        allow create, update: if isOwner(userId) && isValidSettings(incoming());
+      }
+
+      match /workouts/{workoutId} {
+        allow list, get: if isOwner(userId);
+        allow create: if isOwner(userId) && isValidWorkout(incoming()) && isValidId(workoutId);
+        // Workouts are typically immutable in this app's design (saved once)
+        // If update is needed, we'd add similar logic.
+      }
+    }
+  }
+}

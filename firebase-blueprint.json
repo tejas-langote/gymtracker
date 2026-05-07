@@ -1,0 +1,71 @@
+{
+  "entities": {
+    "Settings": {
+      "title": "User Settings",
+      "description": "Global settings for the user",
+      "type": "object",
+      "properties": {
+        "currentWeek": {
+          "type": "number",
+          "description": "The current workout week (1-4)"
+        }
+      },
+      "required": ["currentWeek"]
+    },
+    "Workout": {
+      "title": "Workout Session",
+      "description": "A saved workout session",
+      "type": "object",
+      "properties": {
+        "timestamp": {
+          "type": "object",
+          "description": "Firebase Server Timestamp"
+        },
+        "week": {
+          "type": "number",
+          "description": "Week number constant"
+        },
+        "day": {
+          "type": "string",
+          "description": "Day name (Mon-Sun)"
+        },
+        "workoutName": {
+          "type": "string",
+          "description": "Name of the workout routine"
+        },
+        "exercises": {
+          "type": "array",
+          "description": "List of exercises performed",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": { "type": "string" },
+              "sets": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "weight": { "type": "string" },
+                    "reps": { "type": "string" },
+                    "done": { "type": "boolean" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "required": ["timestamp", "week", "day", "workoutName", "exercises"]
+    }
+  },
+  "firestore": {
+    "users/{userId}/profile/settings": {
+      "schema": "Settings",
+      "description": "Individual user settings"
+    },
+    "users/{userId}/workouts/{workoutId}": {
+      "schema": "Workout",
+      "description": "Collection of past workouts"
+    }
+  }
+}

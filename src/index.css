@@ -1,0 +1,36 @@
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,100..1000;1,9..40,100..1000&family=Syne:wght@400..800&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "DM Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Syne", sans-serif;
+  
+  --color-green: #1fce8a;
+  --color-green-dim: #14a36c;
+  --color-bg: #0f1117;
+  --color-card: #181c27;
+  --color-card2: #1e2333;
+  --color-border: rgba(255, 255, 255, 0.08);
+  --color-muted: #7a8099;
+  --color-muted2: #4a5068;
+}
+
+body {
+  @apply bg-bg text-[#f0f2f8] font-sans overflow-x-hidden;
+  user-scalable: no;
+  overscroll-behavior: none;
+}
+
+h1, h2, h3, .font-display {
+  @apply font-display;
+}
+
+/* Hide number input spinners */
+input[type=number]::-webkit-inner-spin-button,
+input[type=number]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type=number] {
+  -moz-appearance: textfield;
+}

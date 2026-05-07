@@ -1,0 +1,6 @@
+{
+  "name": "GymTracker",
+  "description": "A high-performance personal gym tracker with custom workouts, history tracking, and mobile-first design.",
+  "requestFramePermissions": [],
+  "majorCapabilities": []
+}
