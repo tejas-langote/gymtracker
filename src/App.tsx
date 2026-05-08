@@ -38,7 +38,7 @@ import {
   Flame,
   CheckSquare
 } from 'lucide-react';
-import { auth, db, googleProvider, signInWithRedirect, getRedirectResult } from './lib/firebase';
+import { auth, db, googleProvider, signInWithPopup, getRedirectResult } from './lib/firebase';
 
 // --- CONSTANTS & TYPES ---
 
@@ -127,36 +127,26 @@ export default function App() {
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
   useEffect(() => {
-    // Process any pending redirect sign-in first, then subscribe to auth state.
-    // This prevents the login screen flashing before the redirect result is handled.
-    getRedirectResult(auth)
-      .catch((e: any) => {
-        if (e?.code === 'auth/unauthorized-domain') {
-          setToast({ message: "Domain not authorized — add it in Firebase Console → Auth → Authorized Domains", type: 'error' });
-          setTimeout(() => setToast(null), 6000);
-        } else if (e?.code && e.code !== 'auth/no-redirect-operation') {
-          console.error("Redirect login error:", e.code, e.message);
-        }
-      })
-      .finally(() => {
-        const unsubscribe = onAuthStateChanged(auth, async (u) => {
-          setUser(u);
-          if (u) {
-            try {
-              const settingsDoc = await getDoc(doc(db, `users/${u.uid}/profile/settings`));
-              if (settingsDoc.exists()) {
-                setCurrentWeek(settingsDoc.data().currentWeek);
-              } else {
-                await setDoc(doc(db, `users/${u.uid}/profile/settings`), { currentWeek: 1 });
-              }
-            } catch (e) {
-              console.error("Failed to load settings", e);
-            }
+    // Handle any pending redirect (from older redirect-based flow)
+    getRedirectResult(auth).catch(console.error);
+
+    const unsubscribe = onAuthStateChanged(auth, async (u) => {
+      setUser(u);
+      if (u) {
+        try {
+          const settingsDoc = await getDoc(doc(db, `users/${u.uid}/profile/settings`));
+          if (settingsDoc.exists()) {
+            setCurrentWeek(settingsDoc.data().currentWeek);
+          } else {
+            await setDoc(doc(db, `users/${u.uid}/profile/settings`), { currentWeek: 1 });
           }
-          setLoading(false);
-        });
-        return unsubscribe;
-      });
+        } catch (e) {
+          console.error("Failed to load settings", e);
+        }
+      }
+      setLoading(false);
+    });
+    return unsubscribe;
   }, []);
 
   const showToast = (message: string, type: 'success' | 'error' = 'success') => {
@@ -166,10 +156,12 @@ export default function App() {
 
   const handleLogin = async () => {
     try {
-      await signInWithRedirect(auth, googleProvider);
-    } catch (e) {
-      console.error("Login error", e);
-      showToast("Login failed", "error");
+      await signInWithPopup(auth, googleProvider);
+    } catch (e: any) {
+      if (e?.code !== 'auth/popup-closed-by-user') {
+        console.error("Login error", e);
+        showToast("Login failed", "error");
+      }
     }
   };
 

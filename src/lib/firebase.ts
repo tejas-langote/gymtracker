@@ -1,5 +1,5 @@
 import { initializeApp } from 'firebase/app';
-import { getAuth, GoogleAuthProvider, signInWithRedirect, getRedirectResult } from 'firebase/auth';
+import { getAuth, GoogleAuthProvider, signInWithPopup, getRedirectResult } from 'firebase/auth';
 import { getFirestore, doc, getDocFromServer } from 'firebase/firestore';
 import firebaseConfig from '../../firebase-applet-config.json';
 
@@ -20,4 +20,4 @@ async function testConnection() {
 }
 testConnection();
 
-export { signInWithRedirect, getRedirectResult };
+export { signInWithPopup, getRedirectResult };
