@@ -331,15 +331,15 @@ function WorkoutView({ user, week, setWeek, day, setDay, showToast }: any) {
         initial[ex.name] = Array.from({ length: ex.sets }, () => ({ weight: '', reps: '', done: false }));
       });
       setExerciseData(initial);
-      loadPrefill(exData => setPrefillData(exData));
+      loadPrefill(workoutData.name, exData => setPrefillData(exData));
     }
   }, [day, user.uid]);
 
-  const loadPrefill = async (callback: (data: any) => void) => {
+  const loadPrefill = async (workoutName: string, callback: (data: any) => void) => {
     try {
       const q = query(
         collection(db, `users/${user.uid}/workouts`),
-        where('day', '==', day),
+        where('workoutName', '==', workoutName),
         orderBy('timestamp', 'desc'),
         limit(1)
       );

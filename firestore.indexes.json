@@ -4,7 +4,7 @@
       "collectionGroup": "workouts",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "day", "order": "ASCENDING" },
+        { "fieldPath": "workoutName", "order": "ASCENDING" },
         { "fieldPath": "timestamp", "order": "DESCENDING" }
       ]
     }
