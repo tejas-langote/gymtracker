@@ -340,12 +340,15 @@ function WorkoutView({ user, week, setWeek, day, setDay, showToast }: any) {
       const q = query(
         collection(db, `users/${user.uid}/workouts`),
         where('workoutName', '==', workoutName),
-        orderBy('timestamp', 'desc'),
-        limit(1)
+        limit(10)
       );
       const snap = await getDocs(q);
       if (!snap.empty) {
-        const lastWorkout = snap.docs[0].data();
+        // Sort client-side to get the most recent — avoids needing a composite index
+        const sorted = snap.docs
+          .map(d => d.data())
+          .sort((a, b) => (b.timestamp?.seconds ?? 0) - (a.timestamp?.seconds ?? 0));
+        const lastWorkout = sorted[0];
         const prefill: any = {};
         lastWorkout.exercises.forEach((ex: any) => {
           prefill[ex.name] = ex.sets.map((s: any) => ({ weight: s.weight, reps: s.reps }));
@@ -463,6 +466,15 @@ function WorkoutView({ user, week, setWeek, day, setDay, showToast }: any) {
                 ))}
               </div>
             )}
+          </div>
+
+          {/* Workout Type Label */}
+          <div className="flex items-center gap-3 px-1">
+            <span className="text-2xl">{workoutData.icon}</span>
+            <div>
+              <p className="text-xs uppercase font-bold tracking-widest text-muted">Today's Workout</p>
+              <h2 className="font-display font-extrabold text-lg leading-tight">{workoutData.name}</h2>
+            </div>
           </div>
 
           {/* Info Banner */}
