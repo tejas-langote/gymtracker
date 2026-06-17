@@ -20,7 +20,10 @@ import {
   serverTimestamp,
   doc,
   setDoc,
-  getDoc
+  getDoc,
+  onSnapshot,
+  updateDoc,
+  deleteDoc
 } from 'firebase/firestore';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
@@ -36,7 +39,15 @@ import {
   ChevronRight,
   ExternalLink,
   Flame,
-  CheckSquare
+  CheckSquare,
+  Apple,
+  Plus,
+  Trash2,
+  Pencil,
+  Search,
+  Save,
+  CalendarDays,
+  Droplets
 } from 'lucide-react';
 import { auth, db, googleProvider, signInWithPopup, getRedirectResult } from './lib/firebase';
 
@@ -99,6 +110,71 @@ const WARM_UP_STEPS = [
   "High knee rises"
 ];
 
+const ACTIVITY_LEVELS = [
+  { label: 'Sedentary', value: 1.2 },
+  { label: 'Light', value: 1.375 },
+  { label: 'Moderate', value: 1.55 },
+  { label: 'Very Active', value: 1.725 },
+  { label: 'Extra Active', value: 1.9 }
+];
+
+const MEAL_TYPES = ['Breakfast', 'Lunch', 'Snack', 'Dinner', 'Other'];
+const NUTRITION_TABS = ['Targets', 'Foods', 'Daily Log', 'Habits'] as const;
+const MACRO_KEYS = ['calories', 'protein', 'carbs', 'fat', 'fiber'] as const;
+const TODAY = () => new Date().toISOString().slice(0, 10);
+
+const STARTER_FOODS = [
+  ['Cooked white rice', '100', 'g', 130, 2.7, 28, 0.3, 0.4],
+  ['Roti', '1', 'piece', 120, 3.5, 18, 3.5, 2.5],
+  ['Dal', '1', 'cup', 180, 10, 28, 4, 7],
+  ['Paneer', '100', 'g', 265, 18, 4, 20, 0],
+  ['Chicken breast', '100', 'g', 165, 31, 0, 3.6, 0],
+  ['Whole egg', '1', 'egg', 72, 6.3, 0.4, 4.8, 0],
+  ['Egg white', '1', 'white', 17, 3.6, 0.2, 0.1, 0],
+  ['Banana', '1', 'medium', 105, 1.3, 27, 0.4, 3.1],
+  ['Milk', '250', 'ml', 155, 8, 12, 8, 0],
+  ['Curd', '100', 'g', 98, 3.5, 4.7, 4.3, 0],
+  ['Almonds', '28', 'g', 164, 6, 6, 14, 3.5],
+  ['Oats', '40', 'g', 150, 5, 27, 3, 4],
+  ['Greek yogurt', '100', 'g', 59, 10, 3.6, 0.4, 0],
+  ['Peanut butter', '1', 'tbsp', 94, 3.5, 3.2, 8, 1],
+  ['Whey protein', '1', 'scoop', 120, 24, 3, 2, 0],
+  ['Apple', '1', 'medium', 95, 0.5, 25, 0.3, 4.4],
+  ['Potato', '100', 'g', 87, 1.9, 20, 0.1, 1.8],
+  ['Sweet potato', '100', 'g', 86, 1.6, 20, 0.1, 3],
+  ['Broccoli', '100', 'g', 35, 2.4, 7, 0.4, 3.3],
+  ['Spinach', '100', 'g', 23, 2.9, 3.6, 0.4, 2.2],
+  ['Tofu', '100', 'g', 144, 17, 3, 8.7, 2.3],
+  ['Fish', '100', 'g', 120, 22, 0, 3, 0],
+  ['Chapati', '1', 'piece', 104, 3, 15.7, 3.7, 2.6],
+  ['Idli', '1', 'piece', 58, 2, 12, 0.4, 0.8],
+  ['Poha', '1', 'cup', 250, 5, 46, 6, 3],
+  ['Sprouts', '100', 'g', 100, 7, 18, 1, 6],
+  ['Cottage cheese', '100', 'g', 98, 11, 3.4, 4.3, 0],
+  ['Avocado', '100', 'g', 160, 2, 9, 15, 7]
+].map(([name, servingSize, unit, calories, protein, carbs, fat, fiber]) => ({
+  name: String(name),
+  servingSize: Number(servingSize),
+  unit: String(unit),
+  calories: Number(calories),
+  protein: Number(protein),
+  carbs: Number(carbs),
+  fat: Number(fat),
+  fiber: Number(fiber),
+  source: 'starter'
+}));
+
+const DEFAULT_HABITS = [
+  'Workout done',
+  'Slept 7+ hours',
+  'Hit water target',
+  'Hit protein target',
+  'Logged all meals',
+  '8,000+ steps',
+  'No alcohol/sugary drinks',
+  'Took progress photo'
+];
+
 enum OperationType { CREATE = 'create', UPDATE = 'update', DELETE = 'delete', LIST = 'list', GET = 'get', WRITE = 'write' }
 interface FirestoreErrorInfo { error: string; operationType: OperationType; path: string | null; authInfo: any }
 
@@ -121,7 +197,7 @@ function handleFirestoreError(error: unknown, operationType: OperationType, path
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
-  const [currentTab, setCurrentTab] = useState<'workout' | 'history' | 'rest'>('workout');
+  const [currentTab, setCurrentTab] = useState<'workout' | 'history' | 'nutrition' | 'rest'>('workout');
   const [currentWeek, setCurrentWeek] = useState(1);
   const [selectedDay, setSelectedDay] = useState(DAYS[new Date().getDay() === 0 ? 6 : new Date().getDay() - 1]);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
@@ -244,6 +320,12 @@ export default function App() {
             <HistoryIcon size={18} /> History
           </button>
           <button 
+            onClick={() => setCurrentTab('nutrition')}
+            className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl font-semibold text-sm transition-all ${currentTab === 'nutrition' ? 'bg-green text-black' : 'text-muted hover:text-white'}`}
+          >
+            <Apple size={18} /> Nutrition
+          </button>
+          <button 
             onClick={() => {
               const isSun = new Date().getDay() === 0;
               if (isSun) setCurrentTab('rest');
@@ -278,6 +360,11 @@ export default function App() {
           {currentTab === 'history' && (
             <motion.div key="history" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}>
               <HistoryView user={user} />
+            </motion.div>
+          )}
+          {currentTab === 'nutrition' && (
+            <motion.div key="nutrition" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}>
+              <NutritionHabitsView user={user} showToast={showToast} />
             </motion.div>
           )}
           {currentTab === 'rest' && (
@@ -701,4 +788,631 @@ function HistoryView({ user }: any) {
       ))}
     </div>
   );
+}
+
+function NutritionHabitsView({ user, showToast }: any) {
+  const [section, setSection] = useState<typeof NUTRITION_TABS[number]>('Targets');
+  const [profile, setProfile] = useState<any>(null);
+  const [sharedFoods, setSharedFoods] = useState<any[]>([]);
+  const [customFoods, setCustomFoods] = useState<any[]>([]);
+  const [date, setDate] = useState(TODAY());
+
+  useEffect(() => {
+    const unsubProfile = onSnapshot(doc(db, `users/${user.uid}/profile/nutrition`), (snap) => {
+      setProfile(snap.exists() ? snap.data() : null);
+    });
+    const unsubShared = onSnapshot(collection(db, 'sharedFoods'), (snap) => {
+      setSharedFoods(snap.docs.map(d => ({ id: d.id, ...d.data(), source: 'shared' })));
+    });
+    const unsubCustom = onSnapshot(collection(db, `users/${user.uid}/customFoods`), (snap) => {
+      setCustomFoods(snap.docs.map(d => ({ id: d.id, ...d.data(), source: 'personal' })));
+    });
+    return () => {
+      unsubProfile();
+      unsubShared();
+      unsubCustom();
+    };
+  }, [user.uid]);
+
+  const foods = useMemo(() => {
+    const sharedOrStarter = sharedFoods.length ? sharedFoods : STARTER_FOODS;
+    return [...sharedOrStarter, ...customFoods];
+  }, [sharedFoods, customFoods]);
+
+  return (
+    <div className="space-y-6">
+      <section className="space-y-2">
+        <p className="text-[10px] uppercase font-bold tracking-widest text-muted">Nutrition & Habits</p>
+        <h2 className="text-2xl font-display font-extrabold">Fuel the training</h2>
+      </section>
+
+      <div className="grid grid-cols-2 gap-2">
+        {NUTRITION_TABS.map(tab => (
+          <button
+            key={tab}
+            onClick={() => setSection(tab)}
+            className={`h-11 rounded-xl border text-sm font-bold transition-all ${section === tab ? 'bg-green border-green text-black' : 'bg-card2 border-border text-muted hover:text-white'}`}
+          >
+            {tab}
+          </button>
+        ))}
+      </div>
+
+      {section === 'Targets' && <NutritionTargets user={user} profile={profile} showToast={showToast} />}
+      {section === 'Foods' && <FoodDatabase user={user} sharedFoods={sharedFoods} customFoods={customFoods} foods={foods} showToast={showToast} />}
+      {section === 'Daily Log' && <DailyFoodTracker user={user} profile={profile} foods={foods} date={date} setDate={setDate} showToast={showToast} />}
+      {section === 'Habits' && <HabitTracker user={user} date={date} setDate={setDate} />}
+    </div>
+  );
+}
+
+function NutritionTargets({ user, profile, showToast }: any) {
+  const [form, setForm] = useState({
+    age: '',
+    height: '',
+    weight: '',
+    activityMultiplier: 1.55,
+    deficit: 400,
+    proteinPerKg: 1.8,
+    fatPerKg: 0.9,
+    fiberPer1000: 14
+  });
+
+  useEffect(() => {
+    if (profile) {
+      setForm({
+        age: profile.age ?? '',
+        height: profile.height ?? '',
+        weight: profile.weight ?? '',
+        activityMultiplier: profile.activityMultiplier ?? 1.55,
+        deficit: profile.deficit ?? 400,
+        proteinPerKg: profile.proteinPerKg ?? 1.8,
+        fatPerKg: profile.fatPerKg ?? 0.9,
+        fiberPer1000: profile.fiberPer1000 ?? 14
+      });
+    }
+  }, [profile]);
+
+  const targets = useMemo(() => calculateTargets(form), [form]);
+  const updateField = (key: string, value: any) => setForm(prev => ({ ...prev, [key]: value }));
+
+  const saveProfile = async () => {
+    const numeric = normalizeProfile(form);
+    if (!numeric.age || !numeric.height || !numeric.weight) {
+      showToast('Age, height, and weight are required.', 'error');
+      return;
+    }
+    await setDoc(doc(db, `users/${user.uid}/profile/nutrition`), {
+      ...numeric,
+      targets,
+      updatedAt: serverTimestamp()
+    });
+    showToast('Nutrition targets saved!');
+  };
+
+  return (
+    <div className="space-y-5">
+      <div className="bg-card border border-border rounded-[24px] p-5 space-y-4">
+        <div className="grid grid-cols-2 gap-3">
+          <NumberField label="Age" value={form.age} onChange={v => updateField('age', v)} />
+          <NumberField label="Height cm" value={form.height} onChange={v => updateField('height', v)} />
+          <NumberField label="Weight kg" value={form.weight} onChange={v => updateField('weight', v)} />
+          <label className="space-y-2">
+            <span className="text-xs font-bold text-muted">Activity</span>
+            <select
+              value={form.activityMultiplier}
+              onChange={e => updateField('activityMultiplier', Number(e.target.value))}
+              className="w-full h-11 bg-card2 border border-border rounded-xl px-3 text-sm font-semibold outline-none focus:border-green"
+            >
+              {ACTIVITY_LEVELS.map(level => (
+                <option key={level.value} value={level.value}>{level.label} {level.value}</option>
+              ))}
+            </select>
+          </label>
+          <NumberField label="Deficit kcal" value={form.deficit} onChange={v => updateField('deficit', v)} />
+          <NumberField label="Protein / kg" value={form.proteinPerKg} onChange={v => updateField('proteinPerKg', v)} />
+          <NumberField label="Fat / kg" value={form.fatPerKg} onChange={v => updateField('fatPerKg', v)} />
+          <NumberField label="Fiber / 1000 kcal" value={form.fiberPer1000} onChange={v => updateField('fiberPer1000', v)} />
+        </div>
+        <button onClick={saveProfile} className="w-full h-12 bg-green text-black rounded-xl font-display font-extrabold flex items-center justify-center gap-2">
+          <Save size={18} /> Save Targets
+        </button>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3">
+        <MetricCard label="BMR" value={targets.bmr} suffix="kcal" />
+        <MetricCard label="TDEE" value={targets.tdee} suffix="kcal" />
+        <MetricCard label="Calories" value={targets.calories} suffix="kcal" highlight />
+        <MetricCard label="Protein" value={targets.protein} suffix="g" />
+        <MetricCard label="Carbs" value={targets.carbs} suffix="g" />
+        <MetricCard label="Fat" value={targets.fat} suffix="g" />
+        <MetricCard label="Fiber" value={targets.fiber} suffix="g" />
+        <MetricCard label="Water" value={targets.water} suffix="L" />
+      </div>
+
+      <div className="bg-green/10 border border-green/20 p-4 rounded-[18px] flex gap-3 items-start">
+        <Droplets className="text-green mt-0.5" size={18} />
+        <p className="text-green/90 text-sm font-medium leading-relaxed">
+          Re-check these numbers every 3-4 weeks as weight, activity, and progress change.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function FoodDatabase({ user, sharedFoods, customFoods, foods, showToast }: any) {
+  const [search, setSearch] = useState('');
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [form, setForm] = useState(emptyFoodForm());
+
+  const filtered = foods.filter((food: any) => food.name.toLowerCase().includes(search.toLowerCase()));
+  const sharedEmpty = sharedFoods.length === 0;
+
+  const saveFood = async () => {
+    const food = normalizeFood(form);
+    if (!food.name || !food.servingSize || !food.unit) {
+      showToast('Food name, serving size, and unit are required.', 'error');
+      return;
+    }
+    if (editingId) {
+      await updateDoc(doc(db, `users/${user.uid}/customFoods/${editingId}`), food);
+      showToast('Food updated.');
+    } else {
+      await addDoc(collection(db, `users/${user.uid}/customFoods`), { ...food, createdAt: serverTimestamp() });
+      showToast('Food added.');
+    }
+    setForm(emptyFoodForm());
+    setEditingId(null);
+  };
+
+  return (
+    <div className="space-y-5">
+      {sharedEmpty && (
+        <div className="bg-card border border-border rounded-[18px] p-4 text-sm text-muted leading-relaxed">
+          Shared foods are empty in Firestore, so the app is showing the built-in starter set. Run the shared-food seed with an admin account to persist these into `sharedFoods`.
+        </div>
+      )}
+
+      <div className="bg-card border border-border rounded-[24px] p-5 space-y-3">
+        <h3 className="font-display font-bold text-lg">{editingId ? 'Edit Food' : 'Add Food'}</h3>
+        <input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} placeholder="Food name" className="w-full h-11 bg-card2 border border-border rounded-xl px-3 text-sm outline-none focus:border-green" />
+        <div className="grid grid-cols-2 gap-3">
+          <NumberField label="Serving" value={form.servingSize} onChange={v => setForm({ ...form, servingSize: v })} />
+          <label className="space-y-2">
+            <span className="text-xs font-bold text-muted">Unit</span>
+            <input value={form.unit} onChange={e => setForm({ ...form, unit: e.target.value })} className="w-full h-11 bg-card2 border border-border rounded-xl px-3 text-sm outline-none focus:border-green" placeholder="g, ml, piece" />
+          </label>
+          {MACRO_KEYS.map(key => (
+            <NumberField key={key} label={key} value={form[key]} onChange={v => setForm({ ...form, [key]: v })} />
+          ))}
+        </div>
+        <button onClick={saveFood} className="w-full h-12 bg-green text-black rounded-xl font-display font-extrabold flex items-center justify-center gap-2">
+          <Plus size={18} /> {editingId ? 'Save Food' : 'Add Food'}
+        </button>
+      </div>
+
+      <SearchBox value={search} onChange={setSearch} placeholder="Search foods" />
+      <div className="space-y-3">
+        {filtered.length === 0 ? (
+          <EmptyState icon="🍽️" title="No foods found" body="Add a personal food or try another search." />
+        ) : filtered.map((food: any) => (
+          <div key={`${food.source}-${food.id || food.name}`} className="bg-card border border-border rounded-[18px] p-4 space-y-3">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <div className="flex items-center gap-2">
+                  <h4 className="font-bold">{food.name}</h4>
+                  <span className={`text-[10px] uppercase font-bold px-2 py-1 rounded-full ${food.source === 'personal' ? 'bg-green/15 text-green' : 'bg-card2 text-muted'}`}>
+                    {food.source === 'personal' ? 'Personal' : food.source === 'shared' ? 'Shared' : 'Starter'}
+                  </span>
+                </div>
+                <p className="text-xs text-muted">{food.servingSize} {food.unit}</p>
+              </div>
+              {food.source === 'personal' && (
+                <div className="flex gap-2">
+                  <button onClick={() => { setEditingId(food.id); setForm(foodToForm(food)); }} className="w-9 h-9 rounded-lg border border-border text-muted flex items-center justify-center">
+                    <Pencil size={15} />
+                  </button>
+                  <button onClick={() => deleteDoc(doc(db, `users/${user.uid}/customFoods/${food.id}`))} className="w-9 h-9 rounded-lg border border-red-500/20 text-red-400 flex items-center justify-center">
+                    <Trash2 size={15} />
+                  </button>
+                </div>
+              )}
+            </div>
+            <MacroLine item={food} />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function DailyFoodTracker({ user, profile, foods, date, setDate, showToast }: any) {
+  const [entries, setEntries] = useState<any[]>([]);
+  const [foodSearch, setFoodSearch] = useState('');
+  const [selectedFood, setSelectedFood] = useState<any>(null);
+  const [mealType, setMealType] = useState('Breakfast');
+  const [servings, setServings] = useState('1');
+  const [editingId, setEditingId] = useState<string | null>(null);
+
+  useEffect(() => {
+    const unsub = onSnapshot(collection(db, `users/${user.uid}/logs/${date}/entries`), (snap) => {
+      setEntries(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    });
+    return unsub;
+  }, [user.uid, date]);
+
+  const matches = foods.filter((food: any) => food.name.toLowerCase().includes(foodSearch.toLowerCase())).slice(0, 8);
+  const totals = useMemo(() => sumEntries(entries), [entries]);
+  const targets = profile?.targets || calculateTargets(profile || {});
+  const pending = selectedFood ? multiplyFood(selectedFood, Number(servings) || 0) : null;
+
+  const saveEntry = async () => {
+    if (!selectedFood) {
+      showToast('Select a food first.', 'error');
+      return;
+    }
+    const servingCount = Number(servings);
+    if (!servingCount || servingCount <= 0) {
+      showToast('Servings must be greater than zero.', 'error');
+      return;
+    }
+    const macros = multiplyFood(selectedFood, servingCount);
+    const payload = {
+      mealType,
+      foodId: selectedFood.id || selectedFood.name,
+      foodSource: selectedFood.source || 'starter',
+      foodName: selectedFood.name,
+      servingSize: selectedFood.servingSize,
+      unit: selectedFood.unit,
+      servings: servingCount,
+      ...macros,
+      updatedAt: serverTimestamp()
+    };
+    if (editingId) {
+      await updateDoc(doc(db, `users/${user.uid}/logs/${date}/entries/${editingId}`), payload);
+      showToast('Entry updated.');
+    } else {
+      await addDoc(collection(db, `users/${user.uid}/logs/${date}/entries`), { ...payload, createdAt: serverTimestamp() });
+      showToast('Entry logged.');
+    }
+    setSelectedFood(null);
+    setFoodSearch('');
+    setServings('1');
+    setEditingId(null);
+  };
+
+  return (
+    <div className="space-y-5">
+      <label className="space-y-2 block">
+        <span className="text-xs font-bold text-muted flex items-center gap-2"><CalendarDays size={14} /> Date</span>
+        <input type="date" value={date} onChange={e => setDate(e.target.value)} className="w-full h-12 bg-card2 border border-border rounded-xl px-3 text-sm font-semibold outline-none focus:border-green" />
+      </label>
+
+      <div className="bg-card border border-border rounded-[24px] p-5 space-y-4">
+        <div className="grid grid-cols-2 gap-3">
+          <label className="space-y-2">
+            <span className="text-xs font-bold text-muted">Meal</span>
+            <select value={mealType} onChange={e => setMealType(e.target.value)} className="w-full h-11 bg-card2 border border-border rounded-xl px-3 text-sm font-semibold outline-none focus:border-green">
+              {MEAL_TYPES.map(meal => <option key={meal}>{meal}</option>)}
+            </select>
+          </label>
+          <NumberField label="Servings" value={servings} onChange={setServings} />
+        </div>
+        <SearchBox value={foodSearch} onChange={(v) => { setFoodSearch(v); setSelectedFood(null); }} placeholder={selectedFood ? selectedFood.name : 'Search and select food'} />
+        {foodSearch && !selectedFood && (
+          <div className="bg-card2 border border-border rounded-xl overflow-hidden">
+            {matches.length === 0 ? <p className="p-3 text-sm text-muted">No foods match that search.</p> : matches.map((food: any) => (
+              <button key={`${food.source}-${food.id || food.name}`} onClick={() => { setSelectedFood(food); setFoodSearch(food.name); }} className="w-full px-3 py-3 text-left border-b border-border last:border-b-0 hover:bg-white/5">
+                <span className="font-bold text-sm">{food.name}</span>
+                <span className="text-xs text-muted block">{food.calories} kcal · {food.protein}g protein per {food.servingSize} {food.unit}</span>
+              </button>
+            ))}
+          </div>
+        )}
+        {pending && <MacroLine item={pending} />}
+        <button onClick={saveEntry} className="w-full h-12 bg-green text-black rounded-xl font-display font-extrabold flex items-center justify-center gap-2">
+          <Plus size={18} /> {editingId ? 'Save Entry' : 'Log Food'}
+        </button>
+      </div>
+
+      <DailySummary totals={totals} targets={targets} />
+
+      <div className="space-y-3">
+        {entries.length === 0 ? (
+          <EmptyState icon="🥗" title="No food logged" body="Pick a meal, select a food, and log your first entry." />
+        ) : entries.map(entry => (
+          <div key={entry.id} className="bg-card border border-border rounded-[18px] p-4 space-y-3">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-[10px] uppercase font-bold tracking-widest text-muted">{entry.mealType}</p>
+                <h4 className="font-bold">{entry.foodName}</h4>
+                <p className="text-xs text-muted">{entry.servings} serving(s)</p>
+              </div>
+              <div className="flex gap-2">
+                <button onClick={() => { setEditingId(entry.id); setMealType(entry.mealType); setServings(String(entry.servings)); setSelectedFood(entryToFoodForEdit(entry)); setFoodSearch(entry.foodName); }} className="w-9 h-9 rounded-lg border border-border text-muted flex items-center justify-center">
+                  <Pencil size={15} />
+                </button>
+                <button onClick={() => deleteDoc(doc(db, `users/${user.uid}/logs/${date}/entries/${entry.id}`))} className="w-9 h-9 rounded-lg border border-red-500/20 text-red-400 flex items-center justify-center">
+                  <Trash2 size={15} />
+                </button>
+              </div>
+            </div>
+            <MacroLine item={entry} />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function HabitTracker({ user, date, setDate }: any) {
+  const [defs, setDefs] = useState<any[]>([]);
+  const [monthDocs, setMonthDocs] = useState<Record<string, any>>({});
+  const month = date.slice(0, 7);
+  const days = useMemo(() => daysInMonth(month), [month]);
+
+  useEffect(() => {
+    const unsub = onSnapshot(collection(db, `users/${user.uid}/habitDefinitions`), (snap) => {
+      const rows = snap.docs.map(d => ({ id: d.id, ...d.data() })).filter((h: any) => h.active !== false);
+      setDefs(rows.length ? rows : DEFAULT_HABITS.map((name, index) => ({ id: slugify(name), name, order: index })));
+    });
+    return unsub;
+  }, [user.uid]);
+
+  useEffect(() => {
+    const unsubs = days.map(day => onSnapshot(doc(db, `users/${user.uid}/habits/${day}`), (snap) => {
+      setMonthDocs(prev => ({ ...prev, [day]: snap.exists() ? snap.data() : {} }));
+    }));
+    return () => unsubs.forEach(unsub => unsub());
+  }, [user.uid, month]);
+
+  const toggleHabit = async (day: string, habitId: string) => {
+    const current = !!monthDocs[day]?.[habitId];
+    await setDoc(doc(db, `users/${user.uid}/habits/${day}`), { [habitId]: !current, updatedAt: serverTimestamp() }, { merge: true });
+  };
+
+  return (
+    <div className="space-y-5">
+      <label className="space-y-2 block">
+        <span className="text-xs font-bold text-muted flex items-center gap-2"><CalendarDays size={14} /> Month</span>
+        <input type="month" value={month} onChange={e => setDate(`${e.target.value}-01`)} className="w-full h-12 bg-card2 border border-border rounded-xl px-3 text-sm font-semibold outline-none focus:border-green" />
+      </label>
+
+      <div className="bg-card border border-border rounded-[24px] overflow-x-auto">
+        <div className="min-w-[760px]">
+          <div className="grid border-b border-border" style={{ gridTemplateColumns: `148px repeat(${days.length}, 1fr) 64px` }}>
+            <div className="p-3 text-xs font-bold text-muted">Habit</div>
+            {days.map(day => <div key={day} className="p-2 text-center text-[10px] font-bold text-muted">{Number(day.slice(-2))}</div>)}
+            <div className="p-3 text-xs font-bold text-muted text-center">%</div>
+          </div>
+          {defs.map((habit: any) => {
+            const doneCount = days.filter(day => monthDocs[day]?.[habit.id]).length;
+            return (
+              <div key={habit.id} className="grid border-b border-border last:border-b-0" style={{ gridTemplateColumns: `148px repeat(${days.length}, 1fr) 64px` }}>
+                <div className="p-3 text-xs font-bold flex items-center">{habit.name}</div>
+                {days.map(day => {
+                  const checked = !!monthDocs[day]?.[habit.id];
+                  return (
+                    <button key={day} onClick={() => toggleHabit(day, habit.id)} className="h-10 flex items-center justify-center hover:bg-white/5">
+                      <span className={`w-6 h-6 rounded-md border flex items-center justify-center ${checked ? 'bg-green border-green text-black' : 'border-muted'}`}>
+                        {checked && <Check size={14} strokeWidth={4} />}
+                      </span>
+                    </button>
+                  );
+                })}
+                <div className="p-3 text-center text-sm font-bold text-green">{Math.round((doneCount / days.length) * 100)}%</div>
+              </div>
+            );
+          })}
+          <div className="grid bg-card2" style={{ gridTemplateColumns: `148px repeat(${days.length}, 1fr) 64px` }}>
+            <div className="p-3 text-xs font-bold text-green">Daily score</div>
+            {days.map(day => {
+              const score = defs.length ? Math.round((defs.filter((habit: any) => monthDocs[day]?.[habit.id]).length / defs.length) * 100) : 0;
+              return <div key={day} className="p-2 text-center text-[10px] font-bold">{score}%</div>;
+            })}
+            <div />
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3">
+        {defs.map((habit: any) => (
+          <MetricCard key={habit.id} label={`${habit.name} streak`} value={habitStreak(habit.id, monthDocs, days)} suffix="d" />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function NumberField({ label, value, onChange }: any) {
+  return (
+    <label className="space-y-2">
+      <span className="text-xs font-bold text-muted capitalize">{label}</span>
+      <input type="number" inputMode="decimal" value={value} min="0" onChange={e => onChange(e.target.value)} className="w-full h-11 bg-card2 border border-border rounded-xl px-3 text-sm font-semibold outline-none focus:border-green" />
+    </label>
+  );
+}
+
+function MetricCard({ label, value, suffix, highlight = false }: any) {
+  return (
+    <div className={`bg-card border rounded-[18px] p-4 ${highlight ? 'border-green/40' : 'border-border'}`}>
+      <p className="text-[10px] uppercase font-bold tracking-widest text-muted mb-1">{label}</p>
+      <div className={`text-xl font-display font-extrabold ${highlight ? 'text-green' : ''}`}>{formatNumber(value)} <span className="text-xs text-muted font-sans">{suffix}</span></div>
+    </div>
+  );
+}
+
+function SearchBox({ value, onChange, placeholder }: any) {
+  return (
+    <div className="relative">
+      <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted" />
+      <input value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder} className="w-full h-12 bg-card2 border border-border rounded-xl pl-10 pr-3 text-sm outline-none focus:border-green" />
+    </div>
+  );
+}
+
+function MacroLine({ item }: any) {
+  return (
+    <div className="grid grid-cols-5 gap-2 text-center">
+      {MACRO_KEYS.map(key => (
+        <div key={key} className="bg-card2 rounded-xl p-2">
+          <p className="text-[9px] uppercase font-bold text-muted">{key}</p>
+          <p className="text-xs font-bold">{formatNumber(item[key])}</p>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function DailySummary({ totals, targets }: any) {
+  const rows = [
+    ['calories', 'Calories', 'kcal'],
+    ['protein', 'Protein', 'g'],
+    ['carbs', 'Carbs', 'g'],
+    ['fat', 'Fat', 'g'],
+    ['fiber', 'Fiber', 'g']
+  ];
+  return (
+    <div className="bg-card border border-border rounded-[24px] p-5 space-y-4">
+      <h3 className="font-display font-bold text-lg">Daily Summary</h3>
+      {rows.map(([key, label, suffix]) => {
+        const target = Number(targets?.[key]) || 0;
+        const consumed = Number(totals[key]) || 0;
+        const remaining = target - consumed;
+        const pct = target ? Math.min(100, Math.round((consumed / target) * 100)) : 0;
+        return (
+          <div key={key} className="space-y-2">
+            <div className="flex items-center justify-between text-sm">
+              <span className="font-bold">{label}</span>
+              <span className="text-muted">{formatNumber(consumed)} / {formatNumber(target)} {suffix} · {formatNumber(remaining)} left</span>
+            </div>
+            <div className="h-3 bg-card2 rounded-full border border-border overflow-hidden">
+              <div className="h-full bg-gradient-to-r from-green to-green-dim" style={{ width: `${pct}%` }} />
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function EmptyState({ icon, title, body }: any) {
+  return (
+    <div className="py-16 text-center text-muted">
+      <div className="text-5xl mb-5">{icon}</div>
+      <p className="text-lg text-white font-bold">{title}</p>
+      <p className="text-sm">{body}</p>
+    </div>
+  );
+}
+
+function normalizeProfile(form: any) {
+  return {
+    age: Number(form.age),
+    height: Number(form.height),
+    weight: Number(form.weight),
+    activityMultiplier: Number(form.activityMultiplier),
+    deficit: Number(form.deficit),
+    proteinPerKg: Number(form.proteinPerKg),
+    fatPerKg: Number(form.fatPerKg),
+    fiberPer1000: Number(form.fiberPer1000)
+  };
+}
+
+function calculateTargets(input: any) {
+  const data = normalizeProfile(input || {});
+  const bmr = data.weight && data.height && data.age ? (10 * data.weight) + (6.25 * data.height) - (5 * data.age) + 5 : 0;
+  const tdee = bmr * (data.activityMultiplier || 1.55);
+  const calories = Math.max(0, tdee - (data.deficit || 0));
+  const protein = (data.weight || 0) * (data.proteinPerKg || 1.8);
+  const fat = (data.weight || 0) * (data.fatPerKg || 0.9);
+  const carbs = Math.max(0, (calories - (protein * 4) - (fat * 9)) / 4);
+  const fiber = (calories / 1000) * (data.fiberPer1000 || 14);
+  const water = (data.weight || 0) * 0.035;
+  return { bmr, tdee, calories, protein, fat, carbs, fiber, water };
+}
+
+function emptyFoodForm() {
+  return { name: '', servingSize: '', unit: 'g', calories: '', protein: '', carbs: '', fat: '', fiber: '' } as any;
+}
+
+function foodToForm(food: any) {
+  return {
+    name: food.name || '',
+    servingSize: food.servingSize || '',
+    unit: food.unit || '',
+    calories: food.calories || '',
+    protein: food.protein || '',
+    carbs: food.carbs || '',
+    fat: food.fat || '',
+    fiber: food.fiber || ''
+  };
+}
+
+function normalizeFood(form: any) {
+  return {
+    name: String(form.name || '').trim(),
+    servingSize: Number(form.servingSize),
+    unit: String(form.unit || '').trim(),
+    calories: Number(form.calories) || 0,
+    protein: Number(form.protein) || 0,
+    carbs: Number(form.carbs) || 0,
+    fat: Number(form.fat) || 0,
+    fiber: Number(form.fiber) || 0
+  };
+}
+
+function multiplyFood(food: any, servings: number) {
+  return MACRO_KEYS.reduce((acc: any, key) => {
+    acc[key] = (Number(food[key]) || 0) * servings;
+    return acc;
+  }, {});
+}
+
+function entryToFoodForEdit(entry: any) {
+  const servings = Number(entry.servings) || 1;
+  return {
+    id: entry.foodId,
+    source: entry.foodSource,
+    name: entry.foodName,
+    servingSize: entry.servingSize,
+    unit: entry.unit,
+    ...MACRO_KEYS.reduce((acc: any, key) => {
+      acc[key] = (Number(entry[key]) || 0) / servings;
+      return acc;
+    }, {})
+  };
+}
+
+function sumEntries(entries: any[]) {
+  return entries.reduce((acc, entry) => {
+    MACRO_KEYS.forEach(key => {
+      acc[key] += Number(entry[key]) || 0;
+    });
+    return acc;
+  }, { calories: 0, protein: 0, carbs: 0, fat: 0, fiber: 0 } as any);
+}
+
+function daysInMonth(month: string) {
+  const [year, monthIndex] = month.split('-').map(Number);
+  const count = new Date(year, monthIndex, 0).getDate();
+  return Array.from({ length: count }, (_, idx) => `${month}-${String(idx + 1).padStart(2, '0')}`);
+}
+
+function habitStreak(habitId: string, docs: Record<string, any>, days: string[]) {
+  let streak = 0;
+  for (let i = days.length - 1; i >= 0; i--) {
+    if (!docs[days[i]]?.[habitId]) break;
+    streak += 1;
+  }
+  return streak;
+}
+
+function slugify(value: string) {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
+}
+
+function formatNumber(value: any) {
+  const n = Number(value) || 0;
+  return n >= 100 ? String(Math.round(n)) : String(Math.round(n * 10) / 10);
 }

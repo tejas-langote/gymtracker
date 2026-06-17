@@ -15,8 +15,16 @@ service cloud.firestore {
       return isSignedIn() && request.auth.uid == userId;
     }
 
+    function isAdmin() {
+      return isSignedIn() && request.auth.token.admin == true;
+    }
+
     function isValidId(id) {
       return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isValidDateId(id) {
+      return id is string && id.matches('^\\d{4}-\\d{2}-\\d{2}$');
     }
 
     function incoming() {
@@ -46,11 +54,114 @@ service cloud.firestore {
              && data.exercises.size() <= 20;
     }
 
+    function isNonNegativeNumber(value) {
+      return value is number && value >= 0;
+    }
+
+    function isValidFood(data) {
+      return data.keys().hasAll(['name', 'servingSize', 'unit', 'calories', 'protein', 'carbs', 'fat', 'fiber'])
+             && data.name is string
+             && data.name.size() > 0
+             && data.name.size() <= 120
+             && data.servingSize is number
+             && data.servingSize > 0
+             && data.unit is string
+             && data.unit.size() > 0
+             && data.unit.size() <= 24
+             && isNonNegativeNumber(data.calories)
+             && isNonNegativeNumber(data.protein)
+             && isNonNegativeNumber(data.carbs)
+             && isNonNegativeNumber(data.fat)
+             && isNonNegativeNumber(data.fiber);
+    }
+
+    function isValidNutritionProfile(data) {
+      return data.keys().hasAll(['age', 'height', 'weight', 'activityMultiplier', 'deficit', 'proteinPerKg', 'fatPerKg', 'fiberPer1000', 'targets'])
+             && data.age is number
+             && data.age > 0
+             && data.height is number
+             && data.height > 0
+             && data.weight is number
+             && data.weight > 0
+             && data.activityMultiplier in [1.2, 1.375, 1.55, 1.725, 1.9]
+             && isNonNegativeNumber(data.deficit)
+             && data.proteinPerKg is number
+             && data.proteinPerKg > 0
+             && data.fatPerKg is number
+             && data.fatPerKg > 0
+             && data.fiberPer1000 is number
+             && data.fiberPer1000 > 0
+             && data.targets is map;
+    }
+
+    function isValidFoodEntry(data) {
+      return data.keys().hasAll(['mealType', 'foodId', 'foodSource', 'foodName', 'servings', 'calories', 'protein', 'carbs', 'fat', 'fiber'])
+             && data.mealType in ['Breakfast', 'Lunch', 'Snack', 'Dinner', 'Other']
+             && data.foodId is string
+             && data.foodName is string
+             && data.foodName.size() > 0
+             && data.servings is number
+             && data.servings > 0
+             && isNonNegativeNumber(data.calories)
+             && isNonNegativeNumber(data.protein)
+             && isNonNegativeNumber(data.carbs)
+             && isNonNegativeNumber(data.fat)
+             && isNonNegativeNumber(data.fiber);
+    }
+
+    function isReasonableMap(data) {
+      return data.keys().size() <= 32;
+    }
+
     // Match patterns
+    match /sharedFoods/{foodId} {
+      allow list, get: if isSignedIn();
+      allow create, update: if isAdmin() && isValidFood(incoming()) && isValidId(foodId);
+      allow delete: if isAdmin();
+    }
+
     match /users/{userId} {
       match /profile/settings {
         allow get: if isOwner(userId);
         allow create, update: if isOwner(userId) && isValidSettings(incoming());
+      }
+
+      match /profile/nutrition {
+        allow get: if isOwner(userId);
+        allow create, update: if isOwner(userId) && isValidNutritionProfile(incoming());
+      }
+
+      match /customFoods/{foodId} {
+        allow list, get: if isOwner(userId);
+        allow create, update: if isOwner(userId) && isValidFood(incoming()) && isValidId(foodId);
+        allow delete: if isOwner(userId);
+      }
+
+      match /logs/{date} {
+        allow get: if isOwner(userId) && isValidDateId(date);
+
+        match /entries/{entryId} {
+          allow list, get: if isOwner(userId) && isValidDateId(date);
+          allow create, update: if isOwner(userId) && isValidDateId(date) && isValidFoodEntry(incoming()) && isValidId(entryId);
+          allow delete: if isOwner(userId) && isValidDateId(date);
+        }
+      }
+
+      match /habits/{date} {
+        allow get, list: if isOwner(userId) && isValidDateId(date);
+        allow create, update: if isOwner(userId) && isValidDateId(date) && isReasonableMap(incoming());
+        allow delete: if isOwner(userId) && isValidDateId(date);
+      }
+
+      match /habitDefinitions/{habitId} {
+        allow list, get: if isOwner(userId);
+        allow create, update: if isOwner(userId)
+          && isValidId(habitId)
+          && incoming().keys().hasAll(['name'])
+          && incoming().name is string
+          && incoming().name.size() > 0
+          && incoming().name.size() <= 80;
+        allow delete: if isOwner(userId);
       }
 
       match /workouts/{workoutId} {
